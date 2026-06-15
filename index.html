@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Vault - Test Mode</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.1.1/dist/chartjs-chart-financial.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .dark-bg { background-color: #0B0E17; }
+        .card-bg { background-color: #131722; }
+        .gold-accent { color: #F0B90B; }
+        .ticker { overflow: hidden; white-space: nowrap; animation: ticker-slide 30s linear infinite; }
+        @keyframes ticker-slide { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .pulse-green { animation: pulse-green 1s ease-in-out; }
+        @keyframes pulse-green { 0%, 100% { color: inherit; } 50% { color: #10b981; } }
+        .pulse-red { animation: pulse-red 1s ease-in-out; }
+        @keyframes pulse-red { 0%, 100% { color: inherit; } 50% { color: #ef4444; } }
+        .price-up { color: #10b981; }
+        .price-down { color: #ef4444; }
+        .debug-panel {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #131722;
+            border: 2px solid #F0B90B;
+            border-radius: 10px;
+            padding: 15px;
+            max-width: 350px;
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 9999;
+            font-size: 11px;
+        }
+        .debug-log {
+            color: #10b981;
+            margin: 3px 0;
+            font-family: monospace;
+        }
+        .debug-error {
+            color: #ef4444;
+        }
+        .debug-warning {
+            color: #f59e0b;
+        }
+    </style>
+</head>
+<body class="dark-bg text-white min-h-screen">
+
+    <!-- DEBUG PANEL -->
+    <div class="debug-panel">
+        <div class="font-bold text-[#F0B90B] mb-2">🔍 DEBUG CONSOLE</div>
+        <div id="debug-output"></div>
+        <button onclick="clearDebugLog()" class="mt-2 text-xs bg-[#1F252F] px-2 py-1 rounded hover:bg-[#2F3540]">Clear Log</button>
+        <button onclick="testCreateAccount()" class="mt-2 ml-1 text-xs bg-[#F0B90B] text-black px-2 py-1 rounded hover:bg-yellow-400 font-bold">Test Account</button>
+    </div>
+
+    <!-- AUTH PAGE (Login/Register) -->
+    <div id="auth-page" class="page fixed inset-0 flex items-center justify-center z-50 bg-black/95">
+        <div class="max-w-md w-full">
+            <!-- Login Form -->
+            <div id="login-form" class="card-bg rounded-3xl p-8">
+                <div class="flex items-center gap-3 mb-8 justify-center">
+                    <i class="fas fa-vault text-3xl gold-accent"></i>
+                    <span class="text-2xl font-bold">TRADING VAULT</span>
+                </div>
+                <h2 class="text-2xl font-bold mb-6 text-center">Login</h2>
+                <input id="login-email" type="email" placeholder="Email" class="w-full bg-[#1F252F] rounded-2xl px-6 py-4 mb-4 text-white placeholder-gray-500">
+                <input id="login-password" type="password" placeholder="Password" class="w-full bg-[#1F252F] rounded-2xl px-6 py-4 mb-6 text-white placeholder-gray-500">
+                <button onclick="loginUser()" class="w-full bg-[#F0B90B] hover:bg-yellow-400 text-black font-bold py-4 rounded-3xl mb-4">LOGIN</button>
+                <p class="text-center text-gray-400">Don't have an account? <span onclick="switchToRegister()" class="text-[#F0B90B] cursor-pointer hover:underline">Sign up</span></p>
+            </div>
+
+            <!-- Register Form -->
+            <div id="register-form" class="card-bg rounded-3xl p-8 hidden">
+                <div class="flex items-center gap-3 mb-8 justify-center">
+                    <i class="fas fa-vault text-3xl gold-accent"></i>
+                    <span class="text-2xl font-bold">TRADING VAULT</span>
+                </div>
+                <h2 class="text-2xl font-bold mb-6 text-center">Create Account</h2>
+                <input id="register-name" type="text" placeholder="Full Name" class="w-full bg-[#1F252F] rounded-2xl px-6 py-4 mb-4 text-white placeholder-gray-500">
+                <input id="register-email" type="email" placeholder="Email" class="w-full bg-[#1F252F] rounded-2xl px-6 py-4 mb-4 text-white placeholder-gray-500">
+                <input id="register-password" type="password" placeholder="Password (min 6 chars)" class="w-full bg-[#1F252F] rounded-2xl px-6 py-4 mb-4 text-white placeholder-gray-500">
+                <input id="register-confirm-password" type="password" placeholder="Confirm Password" class="w-full bg-[#1F252F] rounded-2xl px-6 py-4 mb-6 text-white placeholder-gray-500">
+                <button onclick="registerUser()" class="w-full bg-[#F0B90B] hover:bg-yellow-400 text-black font-bold py-4 rounded-3xl mb-4">CREATE ACCOUNT</button>
+                <p class="text-center text-gray-400">Already have an account? <span onclick="switchToLogin()" class="text-[#F0B90B] cursor-pointer hover:underline">Login</span></p>
+            </div>
+
+            <!-- Auth Status Messages -->
+            <div id="auth-error" class="mt-4 bg-red-900/50 border border-red-500 text-red-300 px-4 py-3 rounded-2xl hidden text-center"></div>
+            <div id="auth-success" class="mt-4 bg-green-900/50 border border-green-500 text-green-300 px-4 py-3 rounded-2xl hidden text-center"></div>
+        </div>
+    </div>
+
+    <!-- NAV -->
+    <nav id="navbar" class="bg-[#131722] border-b border-gray-800 sticky top-0 z-50 hidden">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-8">
+                <div onclick="navigateTo('home')" class="flex items-center gap-2 cursor-pointer">
+                    <i class="fas fa-vault text-3xl gold-accent"></i>
+                    <span class="text-2xl font-bold tracking-tight">TRADING VAULT</span>
+                </div>
+                <div class="hidden md:flex gap-6 text-sm font-medium">
+                    <a onclick="navigateTo('home')" class="cursor-pointer hover:text-[#F0B90B] nav-active" id="nav-home">Home</a>
+                    <a onclick="navigateTo('trade')" class="cursor-pointer hover:text-[#F0B90B]" id="nav-trade">Trade</a>
+                    <a onclick="navigateTo('assets')" class="cursor-pointer hover:text-[#F0B90B]" id="nav-assets">Assets</a>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div id="api-status" class="text-xs flex items-center gap-1">
+                    <span id="status-dot" class="w-2 h-2 bg-yellow-400 rounded-full"></span>
+                    <span id="status-text">Loading prices...</span>
+                </div>
+                <div class="flex items-center gap-3 bg-[#1F252F] px-4 py-2 rounded-xl">
+                    <i class="fas fa-user-circle"></i>
+                    <span id="user-name" class="text-sm font-medium">User</span>
+                </div>
+                <div onclick="showDepositModal()" class="flex items-center gap-2 bg-[#1F252F] px-4 py-2 rounded-xl cursor-pointer">
+                    <i class="fas fa-wallet"></i>
+                    <span id="balance-display" class="font-mono">$10,000.00</span>
+                </div>
+                <button onclick="logoutUser()" class="bg-transparent border border-gray-600 hover:border-white px-5 py-2 rounded-3xl text-sm">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- HOME PAGE -->
+    <div id="home-page" class="page hidden">
+        <section class="relative h-[90vh] flex items-center justify-center overflow-hidden bg-gradient-to-b from-[#0B0E17] to-black">
+            <div class="max-w-5xl mx-auto px-6 text-center z-10">
+                <h1 class="text-5xl md:text-7xl font-bold leading-tight mb-6">Trade Crypto, Forex & Commodities<br><span class="gold-accent">With Live Candlestick Charts</span></h1>
+                <p class="text-xl text-gray-300 mb-10">Real-time candlestick charts with BTC, ETH, Forex & Gold. Instant settlements. Start with $10,000.</p>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <button onclick="navigateTo('trade')" class="bg-[#F0B90B] hover:bg-yellow-400 text-black font-semibold px-10 py-5 rounded-3xl text-lg">START TRADING NOW</button>
+                    <button onclick="showDepositModal()" class="border-2 border-[#F0B90B] hover:bg-[#F0B90B]/10 px-10 py-5 rounded-3xl text-lg">DEPOSIT</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Live Ticker -->
+        <div class="bg-[#1F252F] py-3 border-b border-gray-800">
+            <div id="ticker" class="ticker flex items-center text-sm font-mono gap-12"></div>
+        </div>
+
+        <!-- Live Price Cards -->
+        <section class="max-w-6xl mx-auto px-6 py-16">
+            <h2 class="text-3xl font-bold mb-8">Live Markets</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="card-bg rounded-2xl p-6">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-gray-400">BTC/USD</span>
+                        <i class="fab fa-bitcoin text-2xl gold-accent"></i>
+                    </div>
+                    <div class="text-4xl font-bold mb-2" id="btc-price">--</div>
+                    <div id="btc-change" class="text-lg font-mono">--</div>
+                </div>
+
+                <div class="card-bg rounded-2xl p-6">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-gray-400">ETH/USD</span>
+                        <i class="fab fa-ethereum text-2xl gold-accent"></i>
+                    </div>
+                    <div class="text-4xl font-bold mb-2" id="eth-price">--</div>
+                    <div id="eth-change" class="text-lg font-mono">--</div>
+                </div>
+
+                <div class="card-bg rounded-2xl p-6">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-gray-400">EUR/USD</span>
+                        <i class="fas fa-globe text-2xl gold-accent"></i>
+                    </div>
+                    <div class="text-4xl font-bold mb-2" id="forex-price">--</div>
+                    <div id="forex-change" class="text-lg font-mono">--</div>
+                </div>
+
+                <div class="card-bg rounded-2xl p-6">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-gray-400">XAU/USD</span>
+                        <i class="fas fa-star text-2xl gold-accent"></i>
+                    </div>
+                    <div class="text-4xl font-bold mb-2" id="gold-price">--</div>
+                    <div id="gold-change" class="text-lg font-mono">--</div>
+                </div>
+            </div>
+        </section>
+
+        <div class="max-w-6xl mx-auto px-6 py-8 text-center">
+            <button onclick="navigateTo('trade')" class="bg-[#F0B90B] text-black px-12 py-6 rounded-3xl text-xl font-semibold">LAUNCH TRADING PLATFORM →</button>
+        </div>
+    </div>
+
+    <!-- TRADE PAGE -->
+    <div id="trade-page" class="page hidden max-w-7xl mx-auto px-6 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-8 card-bg rounded-3xl p-6">
+                <select id="asset-select" onchange="loadCandleChart()" class="bg-[#1F252F] w-full md:w-auto mb-6 p-4 rounded-2xl text-lg">
+                    <option value="BTC/USD">BTC/USD</option>
+                    <option value="ETH/USD">ETH/USD</option>
+                    <option value="EUR/USD">EUR/USD</option>
+                    <option value="XAU/USD">XAU/USD</option>
+                </select>
+                <div class="text-sm text-gray-400 mb-2">📊 Live candlestick chart • 1-minute intervals</div>
+                <canvas id="candle-chart" height="420"></canvas>
+            </div>
+            <div class="lg:col-span-4 card-bg rounded-3xl p-6">
+                <h3 class="font-semibold text-xl mb-6">Place Real Trade</h3>
+                <div id="current-price-display" class="text-center mb-6 p-4 bg-[#1F252F] rounded-2xl">
+                    <div class="text-sm text-gray-400 mb-1">Current Live Price</div>
+                    <div class="text-3xl font-mono font-bold gold-accent" id="trade-current-price">$--</div>
+                </div>
+                <div class="mb-4">
+                    <label class="text-sm text-gray-400 mb-2 block">Trade Amount (USD)</label>
+                    <input id="trade-amount" type="number" value="100" min="10" max="50000" class="w-full bg-[#1F252F] rounded-2xl px-6 py-5 text-4xl font-mono mb-2 text-white">
+                    <div class="text-xs text-gray-500">Min: $10 | Max: $50,000</div>
+                </div>
+                <div class="mb-6">
+                    <label class="text-sm text-gray-400 mb-2 block">Trade Duration</label>
+                    <div class="flex gap-3">
+                        <div onclick="setTradeDuration(30)" id="trade-dur-30" class="flex-1 text-center py-4 rounded-2xl cursor-pointer bg-[#1F252F]">
+                            <div class="font-bold">30s</div>
+                            <div class="text-xs text-gray-400">+15%</div>
+                        </div>
+                        <div onclick="setTradeDuration(45)" id="trade-dur-45" class="flex-1 text-center py-4 rounded-2xl cursor-pointer bg-[#1F252F]">
+                            <div class="font-bold">45s</div>
+                            <div class="text-xs text-gray-400">+35%</div>
+                        </div>
+                        <div onclick="setTradeDuration(60)" id="trade-dur-60" class="flex-1 text-center py-4 rounded-2xl cursor-pointer bg-[#F0B90B] text-black font-bold">
+                            <div class="font-bold">60s</div>
+                            <div class="text-xs">+50%</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <button onclick="placeTrade('BUY')" class="bg-green-500 hover:bg-green-600 py-8 rounded-3xl text-2xl font-bold">📈 BUY</button>
+                    <button onclick="placeTrade('SELL')" class="bg-red-500 hover:bg-red-600 py-8 rounded-3xl text-2xl font-bold">📉 SELL</button>
+                </div>
+                <div id="trade-status" class="min-h-[80px] text-center"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ASSETS PAGE -->
+    <div id="assets-page" class="page hidden max-w-7xl mx-auto px-6 py-8">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="card-bg rounded-3xl p-6">
+                <div class="text-sm text-gray-400 mb-2">Account Balance</div>
+                <div id="total-balance" class="text-5xl font-mono font-bold gold-accent">$10,000</div>
+            </div>
+            <div class="card-bg rounded-3xl p-6">
+                <div class="text-sm text-gray-400 mb-2">Total P&L</div>
+                <div id="total-pl" class="text-5xl font-mono font-bold text-green-400">$0</div>
+            </div>
+            <div class="card-bg rounded-3xl p-6">
+                <div class="text-sm text-gray-400 mb-2">Win Rate</div>
+                <div id="win-rate" class="text-5xl font-mono font-bold">0%</div>
+            </div>
+        </div>
+        <div class="flex gap-3 mb-8">
+            <button onclick="showDepositModal()" class="bg-green-500 hover:bg-green-600 px-8 py-4 rounded-3xl font-bold">+ Deposit</button>
+            <button onclick="showWithdrawModal()" class="bg-red-500 hover:bg-red-600 px-8 py-4 rounded-3xl font-bold">- Withdraw</button>
+        </div>
+        <div class="card-bg rounded-3xl p-6">
+            <h3 class="text-xl font-bold mb-4">Trade History</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm" id="history-table">
+                    <thead>
+                        <tr class="border-b border-gray-700">
+                            <th class="text-left py-3 px-2">Time</th>
+                            <th class="text-left py-3 px-2">Asset</th>
+                            <th class="text-left py-3 px-2">Type</th>
+                            <th class="text-right py-3 px-2">P&L</th>
+                            <th class="text-center py-3 px-2">Result</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deposit Modal -->
+    <div id="deposit-modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+        <div class="card-bg rounded-3xl p-8 max-w-lg w-full">
+            <h3 class="text-2xl font-bold mb-6">Deposit Funds</h3>
+            <select id="crypto-select" onchange="updateDepositAddress()" class="w-full p-4 bg-[#1F252F] rounded-2xl mb-6 font-bold">
+                <option value="BTC">Bitcoin (BTC)</option>
+                <option value="ETH">Ethereum (ETH)</option>
+                <option value="USDT">USDT (TRC20)</option>
+            </select>
+            <div class="mb-4">
+                <div class="text-xs text-gray-400 mb-2">Deposit Address</div>
+                <div id="deposit-address" class="font-mono bg-black p-4 rounded-2xl text-xs break-all border border-gray-700"></div>
+            </div>
+            <button onclick="copyAddress()" class="w-full py-4 border border-[#F0B90B] text-[#F0B90B] rounded-3xl mb-4 font-bold">📋 COPY ADDRESS</button>
+            <button onclick="hideDepositModal()" class="w-full py-4 bg-gray-700 rounded-3xl font-bold">Close</button>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // DEBUG CONSOLE
+        // ============================================
+        let debugLogs = [];
+        
+        function addDebugLog(message, type = 'log') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            debugLogs.push({ message: logEntry, type });
+            
+            if (debugLogs.length > 50) debugLogs.shift();
+            
+            const debugOutput = document.getElementById('debug-output');
+            const logClass = type === 'error' ? 'debug-error' : type === 'warning' ? 'debug-warning' : 'debug-log';
+            const icon = type === 'error' ? '❌' : type === 'warning' ? '⚠️' : '✅';
+            
+            debugOutput.innerHTML = debugLogs.map(log => `<div class="${log.type === 'error' ? 'debug-error' : log.type === 'warning' ? 'debug-warning' : 'debug-log'}">${log.message}</div>`).join('');
+            debugOutput.scrollTop = debugOutput.scrollHeight;
+            
+            console.log(`%c${logEntry}`, `color: ${type === 'error' ? 'red' : type === 'warning' ? 'orange' : 'green'}`);
+        }
+
+        function clearDebugLog() {
+            debugLogs = [];
+            document.getElementById('debug-output').innerHTML = '';
+            addDebugLog('Debug log cleared', 'log');
+        }
+
+        // ============================================
+        // USER ACCOUNT MANAGEMENT
+        // ============================================
+        let currentUser = null;
+        let users = JSON.parse(localStorage.getItem('trading_vault_users')) || [];
+
+        addDebugLog('🔧 Initialized - Users in Storage: ' + users.length, 'log');
+        addDebugLog('📦 Storage Test: ' + (localStorage.getItem('trading_vault_users') ? 'Working' : 'Failed'), 'log');
+
+        function switchToRegister() {
+            addDebugLog('➡️ Switching to Register Form', 'log');
+            document.getElementById('login-form').classList.add('hidden');
+            document.getElementById('register-form').classList.remove('hidden');
+            clearAuthMessages();
+        }
+
+        function switchToLogin() {
+            addDebugLog('➡️ Switching to Login Form', 'log');
+            document.getElementById('register-form').classList.add('hidden');
+            document.getElementById('login-form').classList.remove('hidden');
+            clearAuthMessages();
+        }
+
+        function clearAuthMessages() {
+            document.getElementById('auth-error').classList.add('hidden');
+            document.getElementById('auth-success').classList.add('hidden');
+        }
+
+        function showAuthError(msg) {
+            addDebugLog('❌ Error: ' + msg, 'error');
+            const el = document.getElementById('auth-error');
+            el.textContent = msg;
+            el.classList.remove('hidden');
+            document.getElementById('auth-success').classList.add('hidden');
+        }
+
+        function showAuthSuccess(msg) {
+            addDebugLog('✅ Success: ' + msg, 'log');
+            const el = document.getElementById('auth-success');
+            el.textContent = msg;
+            el.classList.remove('hidden');
+            document.getElementById('auth-error').classList.add('hidden');
+        }
+
+        function registerUser() {
+            addDebugLog('📝 Registration Started...', 'log');
+            
+            const name = document.getElementById('register-name').value.trim();
+            const email = document.getElementById('register-email').value.trim();
+            const password = document.getElementById('register-password').value;
+            const confirmPassword = document.getElementById('register-confirm-password').value;
+
+            addDebugLog('📋 Form Data: Name=' + name + ', Email=' + email + ', Pass Length=' + password.length, 'log');
+
+            if (!name) {
+                showAuthError('❌ Name is required');
+                return;
+            }
+            if (!email || !email.includes('@')) {
+                showAuthError('❌ Valid email required');
+                return;
+            }
+            if (password.length < 6) {
+                showAuthError('❌ Password must be 6+ characters');
+                return;
+            }
+            if (password !== confirmPassword) {
+                showAuthError('❌ Passwords do not match');
+                return;
+            }
+
+            const existingUser = users.find(u => u.email === email);
+            if (existingUser) {
+                addDebugLog('⚠️ Email already exists: ' + email, 'warning');
+                showAuthError('❌ Email already registered');
+                return;
+            }
+
+            addDebugLog('✅ Validation passed', 'log');
+
+            const newUser = {
+                id: Date.now(),
+                name: name,
+                email: email,
+                password: btoa(password),
+                balance: 10000,
+                trades: [],
+                totalPL: 0,
+                createdAt: new Date().toISOString()
+            };
+
+            addDebugLog('👤 Creating user: ' + name + ' (' + email + ')', 'log');
+
+            users.push(newUser);
+            localStorage.setItem('trading_vault_users', JSON.stringify(users));
+
+            addDebugLog('💾 Saved to localStorage. Total users: ' + users.length, 'log');
+
+            showAuthSuccess('✅ Account created! Logging in...');
+            
+            setTimeout(() => {
+                currentUser = newUser;
+                localStorage.setItem('trading_vault_current_user', JSON.stringify(currentUser));
+                addDebugLog('🔓 User logged in: ' + currentUser.name, 'log');
+                initializeTradingApp();
+            }, 1500);
+        }
+
+        function loginUser() {
+            addDebugLog('🔐 Login Started...', 'log');
+            
+            const email = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value;
+
+            addDebugLog('📧 Email: ' + email + ', Pass Length: ' + password.length, 'log');
+            addDebugLog('📦 Users in database: ' + users.length, 'log');
+
+            if (!email || !password) {
+                showAuthError('❌ Email and password required');
+                return;
+            }
+
+            const user = users.find(u => u.email === email && u.password === btoa(password));
+            
+            if (!user) {
+                addDebugLog('❌ Invalid credentials for: ' + email, 'warning');
+                showAuthError('❌ Invalid email or password');
+                return;
+            }
+
+            currentUser = user;
+            localStorage.setItem('trading_vault_current_user', JSON.stringify(currentUser));
+            addDebugLog('🔓 Login successful: ' + currentUser.name, 'log');
+            showAuthSuccess('✅ Login successful!');
+            
+            setTimeout(() => initializeTradingApp(), 1000);
+        }
+
+        function logoutUser() {
+            if (confirm('Logout?')) {
+                addDebugLog('🔚 User logged out: ' + (currentUser ? currentUser.name : 'Unknown'), 'log');
+                currentUser = null;
+                localStorage.removeItem('trading_vault_current_user');
+                location.reload();
+            }
+        }
+
+        function checkAuth() {
+            const saved = localStorage.getItem('trading_vault_current_user');
+            if (saved) {
+                currentUser = JSON.parse(saved);
+                const exists = users.find(u => u.id === currentUser.id);
+                if (exists) {
+                    addDebugLog('🔐 Auto-login: ' + currentUser.name, 'log');
+                    return true;
+                }
+            }
+            addDebugLog('📝 No session found - showing auth page', 'log');
+            return false;
+        }
+
+        // TEST FUNCTION
+        function testCreateAccount() {
+            addDebugLog('🧪 TEST: Creating account...', 'warning');
+            
+            document.getElementById('register-name').value = 'Test User ' + Date.now();
+            document.getElementById('register-email').value = 'test' + Date.now() + '@example.com';
+            document.getElementById('register-password').value = 'testpass123';
+            document.getElementById('register-confirm-password').value = 'testpass123';
+            
+            switchToRegister();
+            
+            setTimeout(() => {
+                addDebugLog('🧪 TEST: Auto-submitting form...', 'warning');
+                registerUser();
+            }, 500);
+        }
+
+        // ============================================
+        // PRICE & TRADING DATA
+        // ============================================
+        let priceCache = {
+            BTC: { price: 0, change: 0 },
+            ETH: { price: 0, change: 0 },
+            EUR: { price: 0, change: 0 },
+            XAU: { price: 0, change: 0 }
+        };
+
+        async function fetchBTCPrice() {
+            try {
+                const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true');
+                const data = await response.json();
+                if (data.bitcoin) {
+                    priceCache.BTC.price = data.bitcoin.usd;
+                    priceCache.BTC.change = data.bitcoin.usd_24h_change || 0;
+                    updatePriceDisplay('btc', data.bitcoin.usd, priceCache.BTC.change);
+                }
+            } catch (e) {
+                addDebugLog('⚠️ BTC API Error', 'warning');
+            }
+        }
+
+        async function fetchETHPrice() {
+            try {
+                const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd&include_24hr_change=true');
+                const data = await response.json();
+                if (data.ethereum) {
+                    priceCache.ETH.price = data.ethereum.usd;
+                    priceCache.ETH.change = data.ethereum.usd_24h_change || 0;
+                    updatePriceDisplay('eth', data.ethereum.usd, priceCache.ETH.change);
+                }
+            } catch (e) {
+                addDebugLog('⚠️ ETH API Error', 'warning');
+            }
+        }
+
+        async function fetchForexPrice() {
+            try {
+                const response = await fetch('https://api.fcsapi.com/api-v3/forex/latest?symbol=EUR/USD');
+                const data = await response.json();
+                if (data.response && data.response.length > 0) {
+                    priceCache.EUR.price = parseFloat(data.response[0].c);
+                    priceCache.EUR.change = parseFloat(data.response[0].ch);
+                    updatePriceDisplay('forex', priceCache.EUR.price, priceCache.EUR.change);
+                }
+            } catch (e) {
+                addDebugLog('⚠️ Forex API Error', 'warning');
+            }
+        }
+
+        async function fetchGoldPrice() {
+            try {
+                const response = await fetch('https://api.fcsapi.com/api-v3/forex/latest?symbol=XAU/USD');
+                const data = await response.json();
+                if (data.response && data.response.length > 0) {
+                    priceCache.XAU.price = parseFloat(data.response[0].c);
+                    priceCache.XAU.change = parseFloat(data.response[0].ch);
+                    updatePriceDisplay('gold', priceCache.XAU.price, priceCache.XAU.change);
+                }
+            } catch (e) {
+                addDebugLog('⚠️ Gold API Error', 'warning');
+            }
+        }
+
+        function updatePriceDisplay(asset, price, change) {
+            const priceEl = document.getElementById(`${asset}-price`);
+            const changeEl = document.getElementById(`${asset}-change`);
+            
+            if (priceEl) priceEl.textContent = '$' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            if (changeEl) {
+                changeEl.textContent = (change > 0 ? '+' : '') + change.toFixed(2) + '%';
+                changeEl.className = 'text-lg font-mono ' + (change > 0 ? 'price-up' : 'price-down');
+            }
+        }
+
+        function updateTicker() {
+            let html = '';
+            const assets = [
+                { name: 'BTC/USD', price: priceCache.BTC.price, change: priceCache.BTC.change },
+                { name: 'ETH/USD', price: priceCache.ETH.price, change: priceCache.ETH.change },
+                { name: 'EUR/USD', price: priceCache.EUR.price, change: priceCache.EUR.change },
+                { name: 'XAU/USD', price: priceCache.XAU.price, change: priceCache.XAU.change }
+            ];
+            
+            assets.forEach(a => {
+                if (a.price > 0) {
+                    const color = a.change > 0 ? 'text-green-400' : 'text-red-400';
+                    const changeStr = (a.change > 0 ? '+' : '') + a.change.toFixed(2) + '%';
+                    html += `<span class="${color}">${a.name} $${a.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${changeStr} </span>`;
+                }
+            });
+            
+            document.getElementById('ticker').innerHTML = html + html;
+        }
+
+        async function refreshAllPrices() {
+            await Promise.all([fetchBTCPrice(), fetchETHPrice(), fetchForexPrice(), fetchGoldPrice()]);
+            updateTicker();
+        }
+
+        // ============================================
+        // TRADING FUNCTIONS
+        // ============================================
+        let currentBalance = 10000;
+        let currentDuration = 60;
+        let currentAsset = "BTC/USD";
+        let trades = [];
+
+        function navigateTo(page) {
+            document.querySelectorAll('.page:not(#auth-page)').forEach(p => p.classList.add('hidden'));
+            document.getElementById(page + '-page').classList.remove('hidden');
+        }
+
+        function updateBalanceDisplay() {
+            document.getElementById('balance-display').textContent = '$' + currentBalance.toFixed(2);
+            document.getElementById('total-balance').textContent = '$' + currentBalance.toFixed(2);
+        }
+
+        function updateTradeCurrentPrice() {
+            const priceEl = document.getElementById('trade-current-price');
+            let price = 0;
+            switch (currentAsset) {
+                case 'BTC/USD': price = priceCache.BTC.price; break;
+                case 'ETH/USD': price = priceCache.ETH.price; break;
+                case 'EUR/USD': price = priceCache.EUR.price; break;
+                case 'XAU/USD': price = priceCache.XAU.price; break;
+            }
+            if (price > 0) priceEl.textContent = '$' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 });
+        }
+
+        function loadCandleChart() {
+            currentAsset = document.getElementById('asset-select').value;
+            updateTradeCurrentPrice();
+        }
+
+        function setTradeDuration(d) {
+            currentDuration = d;
+            ['30','45','60'].forEach(n => {
+                const el = document.getElementById(`trade-dur-${n}`);
+                if (el) {
+                    el.classList.toggle('bg-[#F0B90B]', parseInt(n)===d);
+                    el.classList.toggle('text-black', parseInt(n)===d);
+                }
+            });
+        }
+
+        function placeTrade(dir) {
+            const amt = parseFloat(document.getElementById('trade-amount').value) || 100;
+            if (amt > currentBalance) return alert("Insufficient funds");
+            
+            currentBalance -= amt;
+            updateBalanceDisplay();
+            addDebugLog('💹 Trade placed: ' + dir + ' $' + amt, 'log');
+        }
+
+        function showDepositModal() {
+            document.getElementById('deposit-modal').classList.remove('hidden');
+            updateDepositAddress();
+        }
+
+        function hideDepositModal() {
+            document.getElementById('deposit-modal').classList.add('hidden');
+        }
+
+        function updateDepositAddress() {
+            const sel = document.getElementById('crypto-select').value;
+            const addrs = {
+                BTC: "bc1q2kvnh6h8fg5y3jwfhjar55xw8j4plnsjj26hjx",
+                ETH: "0x64BB909C1B292126B6aaAB7bA7cD0128E89a904A",
+                USDT: "TEdZicwvr6imGzo6bjVGt7zhVQiP7jaiRx"
+            };
+            document.getElementById('deposit-address').textContent = addrs[sel];
+        }
+
+        function copyAddress() {
+            const addr = document.getElementById('deposit-address').textContent;
+            navigator.clipboard.writeText(addr);
+            alert("✅ Copied!");
+        }
+
+        function showWithdrawModal() {
+            const amt = prompt("Withdrawal amount:");
+            if (amt && parseFloat(amt) <= currentBalance) {
+                currentBalance -= parseFloat(amt);
+                updateBalanceDisplay();
+            }
+        }
+
+        function initializeTradingApp() {
+            if (currentUser) {
+                currentBalance = currentUser.balance || 10000;
+                trades = currentUser.trades || [];
+                document.getElementById('user-name').textContent = currentUser.name.split(' ')[0];
+                
+                document.getElementById('auth-page').classList.add('hidden');
+                document.getElementById('navbar').classList.remove('hidden');
+                
+                updateBalanceDisplay();
+                navigateTo('home');
+                
+                refreshAllPrices();
+                setInterval(refreshAllPrices, 5000);
+                
+                setTradeDuration(60);
+                addDebugLog('🎉 App initialized for: ' + currentUser.name, 'log');
+            }
+        }
+
+        // ============================================
+        // INITIALIZE
+        // ============================================
+        window.onload = () => {
+            addDebugLog('🚀 Page loaded', 'log');
+            
+            if (checkAuth()) {
+                initializeTradingApp();
+            } else {
+                addDebugLog('📍 Showing authentication page', 'log');
+            }
+        };
+    </script>
+</body>
+</html>
